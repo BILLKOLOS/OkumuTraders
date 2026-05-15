@@ -1,0 +1,629 @@
+import { useState, useEffect, useRef } from "react";
+
+const C = {
+  bg:       "#07101f",
+  card:     "#0c1828",
+  input:    "#101f35",
+  border:   "#182c45",
+  green:    "#1cd25e",
+  greenDim: "#071a0e",
+  red:      "#ff2d55",
+  redDim:   "#2a060e",
+  text:     "#ffffff",
+  muted:    "#566a88",
+  sub:      "#334055",
+  nav:      "#0a1422",
+};
+
+const Y_MIN = -3.0;
+const Y_MAX  =  3.0;
+const N      = 90;
+const Y_LABELS = [3.0, 1.5, 0.0, -1.5, -3.0];
+
+function genPt(t) {
+  return (
+    Math.sin(t * 0.38) * 1.35 +
+    Math.sin(t * 1.15) * 0.55 +
+    Math.sin(t * 2.9)  * 0.28 +
+    (Math.random() - 0.5) * 0.22
+  );
+}
+
+function LiveChart({ data, rate }) {
+  const W = 1000;
+  const H = 260;
+  const yRange = Y_MAX - Y_MIN;
+  const toX = (i) => (i / (data.length - 1)) * W;
+  const toY = (v) => ((Y_MAX - v) / yRange) * H;
+  const zeroY = toY(0);
+
+  if (data.length < 2) return null;
+
+  const pts  = data.map((v, i) => ({ x: toX(i), y: toY(v) }));
+  const last  = pts[pts.length - 1];
+  const first = pts[0];
+
+  const linePath = pts
+    .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join(" ");
+
+  const areaPath =
+    `${linePath} ` +
+    `L${last.x.toFixed(1)},${zeroY.toFixed(1)} ` +
+    `L${first.x.toFixed(1)},${zeroY.toFixed(1)} Z`;
+
+  const zY = +zeroY.toFixed(1);
+
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block" }}>
+      <defs>
+        <clipPath id="ot-above">
+          <rect x="0" y="0" width={W} height={zY} />
+        </clipPath>
+        <clipPath id="ot-below">
+          <rect x="0" y={zY} width={W} height={H - zY} />
+        </clipPath>
+        <linearGradient id="ot-gg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="#1cd25e" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#1cd25e" stopOpacity="0.04" />
+        </linearGradient>
+        <linearGradient id="ot-rg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="#ff2d55" stopOpacity="0.03" />
+          <stop offset="100%" stopColor="#ff2d55" stopOpacity="0.5" />
+        </linearGradient>
+      </defs>
+
+      {/* Zero baseline */}
+      <line x1="0" y1={zY} x2={W} y2={zY} stroke="#253a58" strokeWidth="1.5" />
+
+      {/* Green fill above zero */}
+      <path d={areaPath} fill="url(#ot-gg)" clipPath="url(#ot-above)" />
+
+      {/* Red fill below zero */}
+      <path d={areaPath} fill="url(#ot-rg)" clipPath="url(#ot-below)" />
+
+      {/* Price line */}
+      <path
+        d={linePath}
+        fill="none"
+        stroke="#1cd25e"
+        strokeWidth="2.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+
+      {/* Live dot + halo */}
+      <circle cx={last.x} cy={last.y} r="7"  fill="#1cd25e" />
+      <circle cx={last.x} cy={last.y} r="15" fill="#1cd25e" fillOpacity="0.18" />
+
+      {/* Floating rate label */}
+      <rect x={W - 190} y="10" width="180" height="36" rx="6" fill="#0f1f36" />
+      <text
+        x={W - 100} y="34"
+        textAnchor="middle"
+        fill="white"
+        fontSize="18"
+        fontFamily="'Courier New', monospace"
+        fontWeight="800"
+      >
+        Rate: {rate.toFixed(4)}
+      </text>
+    </svg>
+  );
+}
+
+// ── Icons ──────────────────────────────────────────────────────────────────────
+const Icons = {
+  trade: (on) => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <path d="M3 3v18h18" stroke={on ? "#1cd25e" : "#566a88"} strokeWidth="2" strokeLinecap="round"/>
+      <path d="M7 14l4-4 4 4 4-4" stroke={on ? "#1cd25e" : "#566a88"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  deposit: (on) => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke={on ? "#1cd25e" : "#566a88"} strokeWidth="2"/>
+      <path d="M12 8v8M9 14l3 3 3-3" stroke={on ? "#1cd25e" : "#566a88"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  history: (on) => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="4" width="18" height="16" rx="2" stroke={on ? "#1cd25e" : "#566a88"} strokeWidth="2"/>
+      <path d="M7 9h10M7 13h7" stroke={on ? "#1cd25e" : "#566a88"} strokeWidth="2" strokeLinecap="round"/>
+    </svg>
+  ),
+  profile: (on) => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="8" r="4" stroke={on ? "#1cd25e" : "#566a88"} strokeWidth="2"/>
+      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={on ? "#1cd25e" : "#566a88"} strokeWidth="2" strokeLinecap="round"/>
+    </svg>
+  ),
+};
+
+// ── Bottom Nav ─────────────────────────────────────────────────────────────────
+function BottomNav({ screen, setScreen, openDeposit }) {
+  const items = [
+    { id: "trade",   label: "TRADE",   icon: Icons.trade   },
+    { id: "deposit", label: "DEPOSIT", icon: Icons.deposit },
+    { id: "history", label: "HISTORY", icon: Icons.history },
+    { id: "profile", label: "PROFILE", icon: Icons.profile },
+  ];
+  return (
+    <div style={{ display: "flex", background: C.nav, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
+      {items.map(({ id, label, icon }) => (
+        <button
+          key={id}
+          onClick={() => id === "deposit" ? openDeposit() : setScreen(id)}
+          style={{
+            flex: 1, padding: "11px 0 9px",
+            background: "transparent", border: "none",
+            display: "flex", flexDirection: "column",
+            alignItems: "center", gap: 4, cursor: "pointer",
+          }}
+        >
+          {icon(screen === id)}
+          <span style={{
+            fontSize: 9, fontWeight: 800, letterSpacing: 0.8,
+            color: screen === id ? C.green : C.muted,
+          }}>{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Licence footer ─────────────────────────────────────────────────────────────
+function Licence() {
+  return (
+    <div style={{ textAlign: "center", padding: "5px 12px 9px", fontSize: 10, color: C.sub, background: C.nav }}>
+      Licensed in the Commonwealth of The Bahamas · Licence No <strong>BHA-0023-1873201</strong>
+    </div>
+  );
+}
+
+// ── Top bar ────────────────────────────────────────────────────────────────────
+function TopBar({ onLogin }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8, padding: "11px 14px",
+      background: C.nav, borderBottom: `1px solid ${C.border}`, flexShrink: 0,
+    }}>
+      <div style={{
+        width: 32, height: 32, borderRadius: 8, background: C.green,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 16, fontWeight: 900, color: C.bg, flexShrink: 0,
+      }}>O</div>
+      <span style={{ fontWeight: 900, fontSize: 15, flex: 1, letterSpacing: -0.3 }}>OkumuTraders.com</span>
+      <div style={{
+        width: 30, height: 30, borderRadius: "50%", background: C.card,
+        border: `1px solid ${C.border}`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z" fill={C.muted}/>
+        </svg>
+      </div>
+      <button onClick={onLogin} style={{
+        padding: "5px 12px", background: "transparent",
+        border: `1.5px solid ${C.border}`, borderRadius: 7,
+        color: C.text, fontSize: 12, fontWeight: 700, cursor: "pointer",
+      }}>Login</button>
+      <button style={{
+        padding: "5px 12px", background: C.green, border: "none",
+        borderRadius: 7, color: C.bg, fontSize: 12, fontWeight: 800, cursor: "pointer",
+      }}>Sign Up</button>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MAIN APP — opens on trade screen (homepage)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export default function OkumuTraders() {
+  // Start on "trade" — the chart IS the homepage
+  const [screen, setScreen]           = useState("trade");
+  const [showLogin, setShowLogin]     = useState(false);
+  const [showDeposit, setShowDeposit] = useState(false);
+  const [data, setData]               = useState([]);
+  const [rate, setRate]               = useState(2.4477);
+  const [pct, setPct]                 = useState(244.77);
+  const [tf, setTf]                   = useState("1m");
+  const [amount, setAmount]           = useState(100);
+  const [customAmt, setCustomAmt]     = useState("100");
+  const [activeTrade, setActiveTrade] = useState(null);
+  const [pl, setPl]                   = useState(0.0);
+  const [trades, setTrades]           = useState([]);
+  const [notif, setNotif]             = useState(null);
+  // Login form
+  const [lPhone, setLPhone]           = useState("");
+  const [lPass, setLPass]             = useState("");
+  // Deposit form
+  const [dAmt, setDAmt]               = useState("500");
+  const [dPhone, setDPhone]           = useState("254712345678");
+  const [stkSent, setStkSent]         = useState(false);
+
+  const tRef = useRef(0);
+
+  // ── Init chart ──
+  useEffect(() => {
+    const d = [];
+    for (let i = 0; i < N; i++) {
+      tRef.current = i * 0.2;
+      d.push(genPt(tRef.current));
+    }
+    setData(d);
+  }, []);
+
+  // ── Live tick (always running — chart is always visible) ──
+  useEffect(() => {
+    const id = setInterval(() => {
+      tRef.current += 0.2;
+      const v = genPt(tRef.current);
+      setData((p) => [...p.slice(1), v]);
+      setRate((r) => {
+        const next = +(r + (Math.random() - 0.48) * 0.0019).toFixed(4);
+        return Math.min(5, Math.max(0.5, next));
+      });
+      setPct((p) => +(p + (Math.random() - 0.5) * 0.35).toFixed(2));
+    }, 280);
+    return () => clearInterval(id);
+  }, []);
+
+  // ── P&L tracking ──
+  useEffect(() => {
+    if (!activeTrade) { setPl(0); return; }
+    const dir = activeTrade.type === "BUY" ? 1 : -1;
+    setPl(+((rate - activeTrade.entry) * dir * activeTrade.amount * 48).toFixed(2));
+  }, [rate, activeTrade]);
+
+  const notify = (msg) => {
+    setNotif(msg);
+    setTimeout(() => setNotif(null), 3000);
+  };
+
+  const doTrade = (type) => {
+    if (activeTrade) {
+      const dir = activeTrade.type === "BUY" ? 1 : -1;
+      const pnl = +((rate - activeTrade.entry) * dir * activeTrade.amount * 48).toFixed(2);
+      setTrades((t) => [{ ...activeTrade, exit: rate, pnl, time: new Date().toLocaleTimeString() }, ...t].slice(0, 30));
+      notify(`Closed. P&L: KES ${pnl >= 0 ? "+" : ""}${pnl}`);
+      setActiveTrade(null);
+    } else {
+      setActiveTrade({ type, entry: rate, amount });
+      notify(`${type} opened at ${rate}`);
+    }
+  };
+
+  const sendSTK = () => {
+    setStkSent(true);
+    notify("STK Push sent to " + dPhone);
+    setTimeout(() => { setStkSent(false); setShowDeposit(false); }, 2500);
+  };
+
+  const chips = [50, 100, 200, 500];
+  const inp = (extra = {}) => ({
+    display: "block", width: "100%",
+    background: C.input, border: `1.5px solid ${C.border}`, borderRadius: 10,
+    padding: "13px 15px", color: C.text, fontSize: 15,
+    outline: "none", boxSizing: "border-box", ...extra,
+  });
+  const lbl = { fontSize: 10, fontWeight: 700, letterSpacing: 1.2, color: C.muted, marginBottom: 7, display: "block" };
+
+  const shell = {
+    background: C.bg, minHeight: "100vh", color: C.text,
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif",
+    maxWidth: 420, margin: "0 auto", position: "relative",
+    display: "flex", flexDirection: "column", fontSize: 14, overflow: "hidden",
+  };
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // HISTORY
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  if (screen === "history") {
+    return (
+      <div style={shell}>
+        <TopBar onLogin={() => setShowLogin(true)} />
+        <div style={{ flex: 1, padding: "20px 16px", overflowY: "auto" }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Trade History</h2>
+          {trades.length === 0 ? (
+            <div style={{ color: C.muted, textAlign: "center", marginTop: 60, fontSize: 14 }}>
+              No trades yet. Open the Trade tab to start.
+            </div>
+          ) : trades.map((tr, i) => (
+            <div key={i} style={{
+              background: C.card, borderRadius: 12, padding: "14px 16px",
+              marginBottom: 10, border: `1px solid ${C.border}`,
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <div>
+                <div style={{
+                  display: "inline-block", padding: "3px 10px", borderRadius: 6,
+                  fontSize: 11, fontWeight: 800, letterSpacing: 0.8, marginBottom: 6,
+                  background: tr.type === "BUY" ? C.greenDim : C.redDim,
+                  color: tr.type === "BUY" ? C.green : C.red,
+                }}>{tr.type}</div>
+                <div style={{ color: C.muted, fontSize: 12 }}>
+                  {tr.entry.toFixed(4)} → {tr.exit.toFixed(4)}
+                </div>
+                <div style={{ color: C.sub, fontSize: 11, marginTop: 3 }}>{tr.time}</div>
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: tr.pnl >= 0 ? C.green : C.red }}>
+                {tr.pnl >= 0 ? "+" : ""}KES {tr.pnl.toFixed(2)}
+              </div>
+            </div>
+          ))}
+        </div>
+        <BottomNav screen={screen} setScreen={setScreen} openDeposit={() => setShowDeposit(true)} />
+        <Licence />
+      </div>
+    );
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // PROFILE
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  if (screen === "profile") {
+    const totalPnl = trades.reduce((s, t) => s + t.pnl, 0);
+    return (
+      <div style={shell}>
+        <TopBar onLogin={() => setShowLogin(true)} />
+        <div style={{ flex: 1, padding: "24px 16px" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 28 }}>
+            <div style={{
+              width: 72, height: 72, borderRadius: "50%",
+              background: `linear-gradient(135deg, ${C.green}, #0a8f3a)`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 30, fontWeight: 900, color: C.bg, marginBottom: 12,
+            }}>O</div>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>OkumuTraders Member</div>
+            <div style={{ color: C.muted, fontSize: 13, marginTop: 3 }}>Active Trader</div>
+          </div>
+          {[
+            { label: "Total Trades", value: trades.length },
+            { label: "Total P&L (KES)", value: `${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}`, color: totalPnl >= 0 ? C.green : C.red },
+            { label: "Win Rate", value: trades.length ? `${Math.round(trades.filter(t => t.pnl > 0).length / trades.length * 100)}%` : "—" },
+          ].map((s) => (
+            <div key={s.label} style={{
+              background: C.card, borderRadius: 12, padding: "16px 18px",
+              marginBottom: 10, border: `1px solid ${C.border}`,
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <span style={{ color: C.muted, fontSize: 14 }}>{s.label}</span>
+              <span style={{ fontWeight: 800, fontSize: 16, color: s.color || C.text }}>{s.value}</span>
+            </div>
+          ))}
+        </div>
+        <BottomNav screen={screen} setScreen={setScreen} openDeposit={() => setShowDeposit(true)} />
+        <Licence />
+      </div>
+    );
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // TRADE SCREEN — THIS IS THE HOMEPAGE
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  return (
+    <div style={shell}>
+
+      {/* Top bar */}
+      <TopBar onLogin={() => setShowLogin(true)} />
+
+      {/* Rate display */}
+      <div style={{ padding: "9px 14px 2px", flexShrink: 0 }}>
+        <span style={{ fontSize: 32, fontWeight: 900, color: C.green, letterSpacing: -1 }}>
+          {rate.toFixed(4)}
+        </span>
+        {" "}
+        <span style={{
+          fontSize: 13, fontWeight: 700, color: C.green,
+          background: C.greenDim, padding: "3px 9px", borderRadius: 5,
+        }}>
+          +{pct.toFixed(2)}%
+        </span>
+      </div>
+
+      {/* Interval tabs */}
+      <div style={{ display: "flex", gap: 5, padding: "6px 14px 4px", flexShrink: 0 }}>
+        {["30s", "1m", "2m", "5m"].map((t) => (
+          <button key={t} onClick={() => setTf(t)} style={{
+            padding: "4px 12px",
+            background: tf === t ? C.green : "transparent",
+            border: tf === t ? "none" : `1px solid ${C.border}`,
+            borderRadius: 6, fontSize: 12, fontWeight: 700,
+            color: tf === t ? C.bg : C.muted, cursor: "pointer",
+          }}>{t}</button>
+        ))}
+      </div>
+
+      {/* Y-axis + chart */}
+      <div style={{ display: "flex", flexShrink: 0, marginBottom: 2 }}>
+        {/* Y-axis labels */}
+        <div style={{
+          display: "flex", flexDirection: "column", justifyContent: "space-between",
+          padding: "6px 6px 6px 14px", fontSize: 11, color: C.muted,
+          fontWeight: 600, height: 220, boxSizing: "border-box", flexShrink: 0,
+        }}>
+          {Y_LABELS.map((v) => <span key={v} style={{ lineHeight: 1 }}>{v.toFixed(1)}</span>)}
+        </div>
+
+        {/* Chart */}
+        <div style={{ flex: 1, height: 220, overflow: "hidden" }}>
+          <LiveChart data={data} rate={rate} />
+        </div>
+      </div>
+
+      {/* Trade panel */}
+      <div style={{
+        background: C.card, borderTop: `1px solid ${C.border}`,
+        padding: "12px 14px", flexShrink: 0,
+      }}>
+        {/* Amount row */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: C.input, borderRadius: 8, padding: "8px 12px",
+            border: `1.5px solid ${C.border}`, flex: 1,
+          }}>
+            <span style={{ color: C.muted, fontSize: 12, fontWeight: 700 }}>KES</span>
+            <input
+              value={customAmt}
+              onChange={(e) => {
+                setCustomAmt(e.target.value);
+                const v = parseInt(e.target.value);
+                if (!isNaN(v) && v > 0) setAmount(v);
+              }}
+              style={{ background: "transparent", border: "none", outline: "none", color: C.text, fontSize: 16, fontWeight: 800, width: 60 }}
+            />
+          </div>
+          {chips.map((c) => (
+            <button key={c} onClick={() => { setAmount(c); setCustomAmt(String(c)); }} style={{
+              padding: "8px 10px",
+              background: amount === c ? C.greenDim : C.input,
+              border: amount === c ? `1.5px solid ${C.green}` : `1.5px solid ${C.border}`,
+              borderRadius: 8, fontSize: 13, fontWeight: 700,
+              color: amount === c ? C.green : C.muted, cursor: "pointer",
+            }}>{c}</button>
+          ))}
+        </div>
+
+        {/* AUTOSELL + P&L */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: "50%",
+              background: `linear-gradient(135deg, ${C.green}, #0a8f3a)`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, fontWeight: 800, color: C.bg,
+            }}>10</div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.muted, letterSpacing: 1 }}>AUTOSELL</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: C.muted }}>P&L</span>
+            <span style={{ fontWeight: 800, fontSize: 14, color: C.muted }}>KES</span>
+            <span style={{ fontWeight: 900, fontSize: 16, color: pl > 0 ? C.green : pl < 0 ? C.red : C.muted }}>
+              {pl > 0 ? "+" : ""}{pl.toFixed(2)}
+            </span>
+          </div>
+        </div>
+
+        {/* BUY / SELL */}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => doTrade("BUY")} style={{
+            flex: 1, padding: "16px 0",
+            background: activeTrade?.type === "BUY" ? "#0a6e2a" : C.green,
+            border: "none", borderRadius: 11,
+            fontSize: 17, fontWeight: 900, color: C.bg, cursor: "pointer", letterSpacing: 1,
+          }}>
+            {activeTrade?.type === "BUY" ? "CLOSE" : "BUY"}
+          </button>
+          <button onClick={() => doTrade("SELL")} style={{
+            flex: 1, padding: "16px 0",
+            background: activeTrade?.type === "SELL" ? "#6e0a18" : C.red,
+            border: "none", borderRadius: 11,
+            fontSize: 17, fontWeight: 900, color: "#fff", cursor: "pointer", letterSpacing: 1,
+          }}>
+            {activeTrade?.type === "SELL" ? "CLOSE" : "SELL"}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0 }} />
+
+      <BottomNav screen={screen} setScreen={setScreen} openDeposit={() => setShowDeposit(true)} />
+      <Licence />
+
+      {/* ── LOGIN MODAL ─────────────────────────────────────────────────────── */}
+      {showLogin && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 100, padding: 20,
+        }}>
+          <div style={{
+            background: C.card, borderRadius: 20, padding: "30px 22px",
+            width: "100%", maxWidth: 360, border: `1.5px solid ${C.border}`,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 11, justifyContent: "center", marginBottom: 8 }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: 11, background: C.green,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 22, fontWeight: 900, color: C.bg,
+              }}>O</div>
+              <span style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.5 }}>OkumuTraders.com</span>
+            </div>
+            <p style={{ textAlign: "center", color: C.muted, marginBottom: 24, fontSize: 13 }}>
+              Sign in to your trading account
+            </p>
+            <span style={lbl}>EMAIL OR PHONE</span>
+            <input value={lPhone} onChange={(e) => setLPhone(e.target.value)} placeholder="e.g. 254712345678" style={{ ...inp(), marginBottom: 16 }} />
+            <span style={lbl}>PASSWORD</span>
+            <input type="password" value={lPass} onChange={(e) => setLPass(e.target.value)} placeholder="••••••••" style={{ ...inp(), marginBottom: 22 }} />
+            <button
+              onClick={() => { notify("Welcome back!"); setShowLogin(false); }}
+              style={{
+                width: "100%", padding: "15px", background: C.green, border: "none",
+                borderRadius: 11, fontSize: 16, fontWeight: 800, color: C.bg, cursor: "pointer", marginBottom: 10,
+              }}
+            >Sign In</button>
+            <button onClick={() => setShowLogin(false)} style={{
+              width: "100%", padding: "12px", background: "transparent", border: "none",
+              fontSize: 14, fontWeight: 700, color: C.muted, cursor: "pointer",
+            }}>Cancel</button>
+            <p style={{ textAlign: "center", fontSize: 11, color: C.sub, marginTop: 8, lineHeight: 1.6 }}>
+              Licensed in The Bahamas · <strong>BHA-0023-1873201</strong>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── DEPOSIT MODAL ───────────────────────────────────────────────────── */}
+      {showDeposit && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 100, padding: 20,
+        }}>
+          <div style={{
+            background: C.card, borderRadius: 20, padding: "28px 22px",
+            width: "100%", maxWidth: 360, border: `1.5px solid ${C.border}`,
+          }}>
+            <h3 style={{ textAlign: "center", marginBottom: 22, fontSize: 18, fontWeight: 800, color: C.green }}>
+              Deposit via M-Pesa
+            </h3>
+            <span style={lbl}>AMOUNT (KES)</span>
+            <input value={dAmt} onChange={(e) => setDAmt(e.target.value)} style={{ ...inp(), marginBottom: 16 }} />
+            <span style={lbl}>M-PESA PHONE NUMBER</span>
+            <input value={dPhone} onChange={(e) => setDPhone(e.target.value)} style={{ ...inp(), marginBottom: 20 }} />
+            <button onClick={sendSTK} disabled={stkSent} style={{
+              width: "100%", padding: "15px",
+              background: stkSent ? "#0a6e2a" : C.green,
+              border: "none", borderRadius: 11,
+              fontSize: 15, fontWeight: 800, color: C.bg,
+              cursor: stkSent ? "not-allowed" : "pointer", marginBottom: 10,
+            }}>
+              {stkSent ? "Sending..." : "Send STK Push"}
+            </button>
+            <button onClick={() => setShowDeposit(false)} style={{
+              width: "100%", padding: "14px", background: "transparent", border: "none",
+              fontSize: 15, fontWeight: 700, color: C.muted, cursor: "pointer",
+            }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── TOAST ───────────────────────────────────────────────────────────── */}
+      {notif && (
+        <div style={{
+          position: "fixed", bottom: 82, left: "50%", transform: "translateX(-50%)",
+          background: "#1a2d48", border: `1px solid ${C.border}`,
+          borderRadius: 10, padding: "12px 20px",
+          fontSize: 13, fontWeight: 600, color: C.text,
+          zIndex: 200, whiteSpace: "nowrap",
+          boxShadow: "0 4px 24px rgba(0,0,0,0.6)",
+        }}>
+          {notif}
+        </div>
+      )}
+    </div>
+  );
+}
