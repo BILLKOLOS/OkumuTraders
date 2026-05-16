@@ -20,6 +20,7 @@ import {
   CHART_MAX,
   CHART_MIN,
   createMarketState,
+  getTickIntervalMs,
   seedChartPoints,
   tickMarket,
 } from "./lib/marketSimulator.js";
@@ -774,6 +775,7 @@ export default function App() {
   const [rateUp, setRateUp] = useState(true);
   const [tf, setTf] = useState("1m");
   const marketRef = useRef(createMarketState());
+  const activeTradeRef = useRef(null);
 
   // ── Trade state ─────────────────────────────────────────────────────────────
   const [amount, setAmount] = useState(MIN_TRADE_KES);
@@ -781,6 +783,10 @@ export default function App() {
   const [activeTrade, setActiveTrade] = useState(null);
   const [pl, setPl] = useState(0);
   const [tradeLoading, setTradeLoading] = useState(false);
+
+  useEffect(() => {
+    activeTradeRef.current = activeTrade;
+  }, [activeTrade]);
 
   // ── Live feed + stats ───────────────────────────────────────────────────────
   const [activityFeed, setActivityFeed] = useState([]);
@@ -808,14 +814,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const id = setInterval(() => {
-      const snap = tickMarket(marketRef.current);
+    let timer;
+    const run = () => {
+      const inTrade = !!activeTradeRef.current;
+      const snap = tickMarket(marketRef.current, { inTrade });
       setRate(snap.rate);
       setPct(snap.pctChange);
       setRateUp(snap.isUp);
       setChartData((p) => [...p.slice(1), snap.chartPoint]);
-    }, 220);
-    return () => clearInterval(id);
+      timer = setTimeout(run, getTickIntervalMs(inTrade));
+    };
+    run();
+    return () => clearTimeout(timer);
   }, []);
 
   // ── P&L calculation ─────────────────────────────────────────────────────────
