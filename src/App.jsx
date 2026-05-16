@@ -4,6 +4,10 @@ import {
   MIN_DEPOSIT_KES,
   MIN_WITHDRAWAL_KES,
   MIN_TRADE_KES,
+  DEPOSIT_PRESETS,
+  TRADE_PRESETS,
+} from "./lib/limits.js";
+import {
   initializeMpesa,
   pollUntilPaid,
   requestWithdrawal,
@@ -11,6 +15,14 @@ import {
   openPaystackCard,
   verifyPayment,
 } from "./lib/paystack.js";
+import {
+  CHART_LABELS,
+  CHART_MAX,
+  CHART_MIN,
+  createMarketState,
+  seedChartPoints,
+  tickMarket,
+} from "./lib/marketSimulator.js";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
@@ -24,11 +36,10 @@ const C = {
   redBtn: "#ff2d55",
 };
 
-// ── Chart math (unchanged) ────────────────────────────────────────────────────
-const Y_MIN = -3, Y_MAX = 3, N = 90, Y_LABELS = [3, 1.5, 0, -1.5, -3];
-const genPt = (t) =>
-  Math.sin(t * 0.38) * 1.35 + Math.sin(t * 1.15) * 0.55 +
-  Math.sin(t * 2.9) * 0.28 + (Math.random() - 0.5) * 0.22;
+const N = 90;
+const Y_MIN = CHART_MIN;
+const Y_MAX = CHART_MAX;
+const Y_LABELS = CHART_LABELS;
 
 // ── API helper ────────────────────────────────────────────────────────────────
 async function apiFetch(path, opts = {}, token = null) {
@@ -238,7 +249,7 @@ function DepositModal({ open, onClose, user, token, notify, onBalanceUpdate }) {
                 padding: 12, color: C.text, fontSize: 18, fontWeight: 800,
               }} />
             <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-              {[200, 500, 1000, 2000, 5000].map((n) => (
+              {DEPOSIT_PRESETS.map((n) => (
                 <button key={n} type="button" onClick={() => setAmount(String(n))} style={{
                   padding: "6px 10px", borderRadius: 8, border: `1px solid ${C.border}`,
                   background: Number(amount) === n ? C.greenDim : C.input, color: C.text, cursor: "pointer",
@@ -758,10 +769,11 @@ export default function App() {
 
   // ── Chart state ─────────────────────────────────────────────────────────────
   const [chartData, setChartData] = useState([]);
-  const [rate, setRate] = useState(2.4477);
-  const [pct, setPct] = useState(244.77);
+  const [rate, setRate] = useState(2.12);
+  const [pct, setPct] = useState(0);
+  const [rateUp, setRateUp] = useState(true);
   const [tf, setTf] = useState("1m");
-  const tRef = useRef(0);
+  const marketRef = useRef(createMarketState());
 
   // ── Trade state ─────────────────────────────────────────────────────────────
   const [amount, setAmount] = useState(MIN_TRADE_KES);
@@ -787,20 +799,22 @@ export default function App() {
     }
   }, []);
 
-  // ── Chart init + tick ───────────────────────────────────────────────────────
+  // ── Chart init + volatile tick ──────────────────────────────────────────────
   useEffect(() => {
-    const d = [];
-    for (let i = 0; i < N; i++) { tRef.current = i * 0.2; d.push(genPt(tRef.current)); }
-    setChartData(d);
+    const state = createMarketState();
+    marketRef.current = state;
+    setRate(state.rate);
+    setChartData(seedChartPoints(N, state));
   }, []);
 
   useEffect(() => {
     const id = setInterval(() => {
-      tRef.current += 0.2;
-      setChartData((p) => [...p.slice(1), genPt(tRef.current)]);
-      setRate((r) => Math.min(5, Math.max(0.5, +(r + (Math.random() - 0.48) * 0.0019).toFixed(4))));
-      setPct((p) => +(p + (Math.random() - 0.5) * 0.35).toFixed(2));
-    }, 280);
+      const snap = tickMarket(marketRef.current);
+      setRate(snap.rate);
+      setPct(snap.pctChange);
+      setRateUp(snap.isUp);
+      setChartData((p) => [...p.slice(1), snap.chartPoint]);
+    }, 220);
     return () => clearInterval(id);
   }, []);
 
@@ -923,11 +937,12 @@ export default function App() {
   const TradeView = () => (
     <>
       <div style={{ padding: "9px 14px 2px" }}>
-        <span style={{ fontSize: 32, fontWeight: 900, color: C.green }}>{rate.toFixed(4)}</span>
+        <span style={{ fontSize: 32, fontWeight: 900, color: rateUp ? C.green : C.red }}>{rate.toFixed(4)}</span>
         <span style={{
-          fontSize: 13, fontWeight: 700, color: C.green,
-          background: C.greenDim, padding: "3px 9px", borderRadius: 5, marginLeft: 6,
-        }}>+{pct.toFixed(2)}%</span>
+          fontSize: 13, fontWeight: 700, color: rateUp ? C.green : C.red,
+          background: rateUp ? C.greenDim : "rgba(255,45,85,0.12)",
+          padding: "3px 9px", borderRadius: 5, marginLeft: 6,
+        }}>{rateUp ? "+" : ""}{pct.toFixed(2)}%</span>
       </div>
 
       {/* Timeframe selector */}
@@ -974,7 +989,7 @@ export default function App() {
               }}
               style={{ background: "transparent", border: "none", outline: "none", color: C.text, fontSize: 16, fontWeight: 800, width: 60 }} />
           </div>
-          {[50, 100, 200, 500].map((c) => (
+          {TRADE_PRESETS.map((c) => (
             <button key={c} onClick={() => { setAmount(c); setCustomAmt(String(c)); }} style={{
               padding: "8px 10px",
               background: amount === c ? C.greenDim : C.input,
