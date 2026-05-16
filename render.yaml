@@ -1,0 +1,38 @@
+# Render Blueprint — OkumuTraders
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: okumutraders-api
+    runtime: node
+    rootDir: okumutraders-backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_URL
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false
+      - key: PAYSTACK_WEBHOOK_SECRET
+        sync: false
+      - key: PAYSTACK_CALLBACK_URL
+        sync: false
+
+  - type: web
+    name: okumutraders-web
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+      - key: VITE_SOCKET_URL
+        sync: false

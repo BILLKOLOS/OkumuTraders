@@ -9,7 +9,7 @@ import {
   getPublicKey,
   openPaystackCard,
   verifyPayment,
-} from "./lib/paystack.js";
+} from "../src/lib/paystack.js";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
