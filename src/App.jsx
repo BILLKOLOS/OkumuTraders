@@ -3,6 +3,7 @@ import { io } from "socket.io-client";
 import {
   MIN_DEPOSIT_KES,
   MIN_WITHDRAWAL_KES,
+  MIN_TRADE_KES,
   initializeMpesa,
   pollUntilPaid,
   requestWithdrawal,
@@ -763,8 +764,8 @@ export default function App() {
   const tRef = useRef(0);
 
   // ── Trade state ─────────────────────────────────────────────────────────────
-  const [amount, setAmount] = useState(200);
-  const [customAmt, setCustomAmt] = useState("200");
+  const [amount, setAmount] = useState(MIN_TRADE_KES);
+  const [customAmt, setCustomAmt] = useState(String(MIN_TRADE_KES));
   const [activeTrade, setActiveTrade] = useState(null);
   const [pl, setPl] = useState(0);
   const [tradeLoading, setTradeLoading] = useState(false);
@@ -891,6 +892,9 @@ export default function App() {
       setTradeLoading(false);
     } else {
       // Open trade
+      if (!amount || amount < MIN_TRADE_KES) {
+        return notify(`Minimum trade is KES ${MIN_TRADE_KES}`);
+      }
       if ((user?.balance ?? 0) < amount) {
         return notify("Insufficient balance. Please deposit.");
       }

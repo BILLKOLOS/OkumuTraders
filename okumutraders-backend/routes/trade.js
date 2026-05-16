@@ -10,7 +10,7 @@ router.use(protect);
 // ─── P&L formula (mirrors frontend logic) ────────────────────────────────────
 // OTC binary-style: profit/loss is stake × multiplier based on direction vs rate move
 const MULTIPLIER = 48; // same as frontend: (rate - entry) * dir * amount * 48
-const MIN_STAKE = 50;  // KES
+const MIN_STAKE = 1; // KES — production: 200
 
 function calcPnl(direction, entryRate, exitRate, amount) {
   const dir = direction === 'BUY' ? 1 : -1;

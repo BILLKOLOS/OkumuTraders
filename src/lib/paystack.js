@@ -19,8 +19,10 @@ function authHeaders(token) {
   return h;
 }
 
-export const MIN_DEPOSIT_KES = 200;
-export const MIN_WITHDRAWAL_KES = 500;
+/** Production: deposit 200, withdrawal 500, trade 200 */
+export const MIN_DEPOSIT_KES = 1;
+export const MIN_WITHDRAWAL_KES = 1;
+export const MIN_TRADE_KES = 1;
 
 export async function getPublicKey(token) {
   const res = await fetch(`${API_ROOT}/api/payments/paystack/public-key`, {

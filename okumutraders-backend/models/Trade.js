@@ -6,7 +6,7 @@ const tradeSchema = new mongoose.Schema(
 
     // ── Position ──────────────────────────────────────────────────────────────
     direction: { type: String, enum: ['BUY', 'SELL'], required: true },
-    amount: { type: Number, required: true, min: 50 }, // minimum KES 50 stake
+    amount: { type: Number, required: true, min: 1 }, // production: min 200
 
     // ── Rate snapshots ────────────────────────────────────────────────────────
     entryRate: { type: Number, required: true },
