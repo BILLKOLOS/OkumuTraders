@@ -44,7 +44,20 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/payments/paystack', paystackRoutes);
 app.use('/api/stats', statsRoutes);
 
+app.get('/', (req, res) => {
+  res.json({
+    service: 'OkumuTraders API',
+    status: 'running',
+    health: '/api/health',
+    docs: 'API routes are under /api/*',
+  });
+});
+
 app.get('/api/health', (req, res) => res.json({ status: 'OK', ts: Date.now() }));
+
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found', path: req.path });
+});
 
 mongoose
   .connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/okumutraders')
